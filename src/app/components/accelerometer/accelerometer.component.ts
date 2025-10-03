@@ -1,5 +1,4 @@
-import { Component, signal, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, signal, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
 
 @Component({
   selector: 'app-accelerometer',
@@ -71,38 +70,26 @@ import { CommonModule } from '@angular/common';
             </div>
           </div>
 
-          <div class="readings">
-            <div class="reading primary">
-              <label>Total Force:</label>
-              <span class="force-value">{{ totalForce().toFixed(2) }} m/s²</span>
-            </div>
-
-            <div class="reading">
-              <label>X-Axis:</label>
-              <span [class.active]="Math.abs(acceleration().x) > 2">
-                {{ acceleration().x.toFixed(2) }} m/s²
-              </span>
-            </div>
-
-            <div class="reading">
-              <label>Y-Axis:</label>
-              <span [class.active]="Math.abs(acceleration().y) > 2">
-                {{ acceleration().y.toFixed(2) }} m/s²
-              </span>
-            </div>
-
-            <div class="reading">
-              <label>Z-Axis:</label>
-              <span [class.active]="Math.abs(acceleration().z) > 2">
-                {{ acceleration().z.toFixed(2) }} m/s²
-              </span>
-            </div>
-
-            <div class="reading">
-              <label>Motion State:</label>
-              <span [class.active]="isMoving()">
-                {{ getMotionState() }}
-              </span>
+          <div class="graph-container">
+            <h3>Real-time Data (60 second window)</h3>
+            <canvas #graphCanvas></canvas>
+            <div class="legend">
+              <div class="legend-item">
+                <span class="legend-color total"></span>
+                <span>Total Force</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-color x-axis"></span>
+                <span>X-Axis</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-color y-axis"></span>
+                <span>Y-Axis</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-color z-axis"></span>
+                <span>Z-Axis</span>
+              </div>
             </div>
           </div>
 
@@ -257,48 +244,59 @@ import { CommonModule } from '@angular/common';
       color: #333;
     }
 
-    .readings {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-    }
-
-    .reading {
+    .graph-container {
       background: white;
-      padding: 1rem;
-      border-radius: 0.5rem;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      border-radius: 1rem;
+      padding: 2rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .graph-container h3 {
+      color: #333;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    canvas {
+      width: 100%;
+      height: 300px;
+      display: block;
+    }
+
+    .legend {
       display: flex;
-      justify-content: space-between;
+      justify-content: center;
+      gap: 2rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
       align-items: center;
+      gap: 0.5rem;
     }
 
-    .reading.primary {
-      grid-column: 1 / -1;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
+    .legend-color {
+      width: 20px;
+      height: 3px;
+      border-radius: 2px;
     }
 
-    .reading label {
-      font-weight: bold;
+    .legend-color.total {
+      background: #764ba2;
     }
 
-    .reading span {
-      font-size: 1.1rem;
-      font-weight: bold;
+    .legend-color.x-axis {
+      background: #28a745;
     }
 
-    .force-value {
-      font-size: 1.5rem !important;
+    .legend-color.y-axis {
+      background: #007bff;
     }
 
-    .reading span.active {
-      color: #28a745;
-    }
-
-    .reading.primary span.active {
-      color: #fff;
-      text-shadow: 0 0 10px rgba(255,255,255,0.5);
+    .legend-color.z-axis {
+      background: #fd7e14;
     }
 
     .motion-history {
@@ -411,10 +409,6 @@ import { CommonModule } from '@angular/common';
         padding: 1rem;
       }
 
-      .readings {
-        grid-template-columns: 1fr;
-      }
-
       .info-grid {
         grid-template-columns: 1fr;
       }
@@ -438,10 +432,16 @@ import { CommonModule } from '@angular/common';
         text-align: center;
         min-width: auto;
       }
+
+      .legend {
+        gap: 1rem;
+      }
     }
   `]
 })
-export class AccelerometerComponent implements OnInit, OnDestroy {
+export class AccelerometerComponent implements OnInit, OnDestroy, AfterViewInit {
+  @ViewChild('graphCanvas') graphCanvas!: ElementRef<HTMLCanvasElement>;
+
   supported = signal(false);
   hasPermission = signal(false);
   acceleration = signal({ x: 0, y: 0, z: 0 });
@@ -453,7 +453,36 @@ export class AccelerometerComponent implements OnInit, OnDestroy {
     type: string;
   }>>([]);
 
+  private dataHistory: Array<{
+    timestamp: number;
+    totalForce: number;
+    x: number;
+    y: number;
+    z: number;
+  }> = [];
+  private animationFrameId?: number;
+  private ctx?: CanvasRenderingContext2D;
+  private readonly WINDOW_MS = 60000; // 60 seconds
+
   protected readonly Math = Math;
+
+  ngAfterViewInit() {
+    if (this.graphCanvas) {
+      const canvas = this.graphCanvas.nativeElement;
+      this.ctx = canvas.getContext('2d') || undefined;
+
+      // Set canvas size
+      const resizeCanvas = () => {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        this.ctx?.scale(window.devicePixelRatio, window.devicePixelRatio);
+      };
+
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+    }
+  }
 
   ngOnInit() {
     this.checkSupport();
@@ -461,6 +490,9 @@ export class AccelerometerComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.stopListening();
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
   }
 
   private checkSupport() {
@@ -490,6 +522,7 @@ export class AccelerometerComponent implements OnInit, OnDestroy {
 
   private startListening() {
     window.addEventListener('devicemotion', this.handleMotion.bind(this));
+    this.startGraphRendering();
   }
 
   private stopListening() {
@@ -507,7 +540,141 @@ export class AccelerometerComponent implements OnInit, OnDestroy {
 
       this.acceleration.set(newAcceleration);
       this.detectMotionEvents(newAcceleration);
+      this.addDataPoint(newAcceleration);
     }
+  }
+
+  private addDataPoint(acc: { x: number; y: number; z: number }) {
+    const timestamp = Date.now();
+    const totalForce = this.totalForce();
+
+    this.dataHistory.push({
+      timestamp,
+      totalForce,
+      x: acc.x,
+      y: acc.y,
+      z: acc.z
+    });
+
+    // Remove data older than window
+    const cutoff = timestamp - this.WINDOW_MS;
+    this.dataHistory = this.dataHistory.filter(d => d.timestamp >= cutoff);
+  }
+
+  private startGraphRendering() {
+    const render = () => {
+      this.drawGraph();
+      this.animationFrameId = requestAnimationFrame(render);
+    };
+    render();
+  }
+
+  private drawGraph() {
+    if (!this.ctx || !this.graphCanvas) return;
+
+    const canvas = this.graphCanvas.nativeElement;
+    const ctx = this.ctx;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    if (this.dataHistory.length < 2) return;
+
+    // Calculate bounds
+    const now = Date.now();
+    const startTime = now - this.WINDOW_MS;
+
+    // Find min/max for scaling
+    let maxValue = 15; // Default max
+    let minValue = -15;
+    this.dataHistory.forEach(d => {
+      maxValue = Math.max(maxValue, d.totalForce, Math.abs(d.x), Math.abs(d.y), Math.abs(d.z));
+      minValue = Math.min(minValue, -Math.abs(d.x), -Math.abs(d.y), -Math.abs(d.z));
+    });
+
+    const padding = 40;
+    const graphWidth = width - padding * 2;
+    const graphHeight = height - padding * 2;
+
+    // Draw axes
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, height - padding);
+    ctx.lineTo(width - padding, height - padding);
+    ctx.stroke();
+
+    // Draw grid lines
+    ctx.strokeStyle = '#f5f5f5';
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (graphHeight / 5) * i;
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(width - padding, y);
+      ctx.stroke();
+    }
+
+    // Helper function to scale values
+    const scaleX = (timestamp: number) => {
+      const normalizedTime = (timestamp - startTime) / this.WINDOW_MS;
+      return padding + normalizedTime * graphWidth;
+    };
+
+    const scaleY = (value: number) => {
+      const normalizedValue = (value - minValue) / (maxValue - minValue);
+      return height - padding - normalizedValue * graphHeight;
+    };
+
+    // Draw lines
+    const drawLine = (getValue: (d: typeof this.dataHistory[0]) => number, color: string, lineWidth = 2) => {
+      if (this.dataHistory.length < 2) return;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+
+      let started = false;
+      this.dataHistory.forEach(d => {
+        const x = scaleX(d.timestamp);
+        const y = scaleY(getValue(d));
+
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+
+      ctx.stroke();
+    };
+
+    // Draw all lines
+    drawLine(d => d.x, '#28a745', 2);
+    drawLine(d => d.y, '#007bff', 2);
+    drawLine(d => d.z, '#fd7e14', 2);
+    drawLine(d => d.totalForce, '#764ba2', 3);
+
+    // Draw axis labels
+    ctx.fillStyle = '#666';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'right';
+
+    // Y-axis labels
+    for (let i = 0; i <= 5; i++) {
+      const value = minValue + ((maxValue - minValue) / 5) * (5 - i);
+      const y = padding + (graphHeight / 5) * i;
+      ctx.fillText(value.toFixed(0), padding - 10, y + 4);
+    }
+
+    // X-axis labels (time)
+    ctx.textAlign = 'center';
+    ctx.fillText('60s', padding, height - padding + 20);
+    ctx.fillText('0s', width - padding, height - padding + 20);
   }
 
   private detectMotionEvents(acc: { x: number; y: number; z: number }) {
@@ -545,19 +712,6 @@ export class AccelerometerComponent implements OnInit, OnDestroy {
     return Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
   }
 
-  isMoving(): boolean {
-    return this.totalForce() > 11; // Above normal gravity
-  }
-
-  getMotionState(): string {
-    const force = this.totalForce();
-
-    if (force > 15) return '🌪️ Shaking';
-    if (force > 12) return '📳 High Motion';
-    if (force > 11) return '🚶 Moving';
-    return '😴 Still';
-  }
-
   getDeviceTransform(): string {
     const acc = this.acceleration();
     const rotateX = Math.max(-30, Math.min(30, acc.y * 3));
@@ -574,5 +728,6 @@ export class AccelerometerComponent implements OnInit, OnDestroy {
 
   clearHistory() {
     this.motionEvents.set([]);
+    this.dataHistory = [];
   }
 }

@@ -1,47 +1,77 @@
-You are an expert in TypeScript, Angular, and scalable web application development. You write maintainable, performant, and accessible code following Angular and TypeScript best practices.
+# CLAUDE.md
 
-## TypeScript Best Practices
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Use strict type checking
-- Prefer type inference when the type is obvious
-- Avoid the `any` type; use `unknown` when type is uncertain
+## Project Overview
 
-## Angular Best Practices
+This is an Angular 20 application that demonstrates mobile device sensor APIs (accelerometer, gyroscope, magnetometer, light sensor, proximity, compass, and leveler). The app showcases various sensor capabilities using modern web APIs and is designed for mobile devices.
 
-- Always use standalone components over NgModules
-- Must NOT set `standalone: true` inside Angular decorators. It's the default.
-- Use signals for state management
-- Implement lazy loading for feature routes
-- Do NOT use the `@HostBinding` and `@HostListener` decorators. Put host bindings inside the `host` object of the `@Component` or `@Directive` decorator instead
-- Use `NgOptimizedImage` for all static images.
-  - `NgOptimizedImage` does not work for inline base64 images.
+## Key Commands
 
-## Components
+### Development
+```bash
+npm start              # Start dev server (ng serve)
+npm run watch          # Build with watch mode
+npm run build          # Production build (outputs to docs/)
+npm test               # Run Karma tests
+```
 
-- Keep components small and focused on a single responsibility
-- Use `input()` and `output()` functions instead of decorators
-- Use `computed()` for derived state
-- Set `changeDetection: ChangeDetectionStrategy.OnPush` in `@Component` decorator
-- Prefer inline templates for small components
-- Prefer Reactive forms instead of Template-driven ones
-- Do NOT use `ngClass`, use `class` bindings instead
-- Do NOT use `ngStyle`, use `style` bindings instead
+### Build Output
+- Production builds output to `docs/` directory (configured for GitHub Pages)
+- Base href is set to `/sensors-example/`
 
-## State Management
+## Architecture
 
-- Use signals for local component state
-- Use `computed()` for derived state
-- Keep state transformations pure and predictable
-- Do NOT use `mutate` on signals, use `update` or `set` instead
+### Component Structure
+All sensor components follow a consistent pattern:
+- Located in `src/app/components/`
+- Use inline templates and inline styles (configured in angular.json)
+- Implement OnInit/OnDestroy lifecycle hooks for sensor management
+- Use signals for reactive state management
+- Request permissions before accessing sensors (iOS Safari requirement)
 
-## Templates
+### Routing
+- Lazy-loaded components using `loadComponent` pattern
+- Routes defined in `src/app/routes.ts`
+- All routes redirect unknown paths to `/home`
 
-- Keep templates simple and avoid complex logic
-- Use native control flow (`@if`, `@for`, `@switch`) instead of `*ngIf`, `*ngFor`, `*ngSwitch`
-- Use the async pipe to handle observables
+### Sensor Permission Pattern
+Components follow this pattern:
+1. Check if sensor API is supported (`supported` signal)
+2. Request permission if needed (iOS Safari requires explicit permission)
+3. Start/stop sensor listeners in lifecycle hooks
+4. Display permission UI if needed
 
-## Services
+### Type Definitions
+Custom sensor API types are defined in `src/types.d.ts`:
+- Extended DeviceOrientationEvent with webkit properties
+- Window interfaces for AmbientLightSensor, Magnetometer, ProximitySensor
+- Permission API types
 
-- Design services around a single responsibility
-- Use the `providedIn: 'root'` option for singleton services
-- Use the `inject()` function instead of constructor injection
+### Styling
+- Global styles in `src/styles.css`
+- Component styles are inline (configured in angular.json schematics)
+- Responsive design with mobile-first approach
+
+## TypeScript Configuration
+- Strict mode enabled with comprehensive type checking
+- Target: ES2022
+- Module system: preserve
+- Strict template checking enabled in Angular compiler options
+
+## Prettier Configuration
+- Print width: 100
+- Single quotes enabled
+- Angular parser for HTML files
+
+## Important Notes
+- The app requires HTTPS for most sensor APIs to work
+- iOS Safari requires explicit permission via `requestPermission()` methods
+- Components use the modern Angular standalone component pattern
+- All routes use lazy loading for optimal performance
+- The home component displays a grid of available sensor demos with descriptions
+
+## Testing
+- Uses Karma + Jasmine
+- Test files: `*.spec.ts`
+- Configuration in `tsconfig.spec.json`
