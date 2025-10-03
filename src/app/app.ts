@@ -1,16 +1,31 @@
-import { Component, signal } from '@angular/core';
+import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { NavigationComponent } from './components/navigation/navigation.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, NavigationComponent],
   template: `
-    <h1>Welcome to {{ title() }}!</h1>
-
-    <router-outlet />
+    <div class="app">
+      <app-navigation />
+      <main class="main-content">
+        <router-outlet />
+      </main>
+    </div>
   `,
-  styles: [],
+  styles: [`
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main-content {
+      flex: 1;
+      padding: 1rem;
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+  `],
 })
-export class App {
-  protected readonly title = signal('sensors');
-}
+export class App {}
